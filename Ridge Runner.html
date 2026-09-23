@@ -1,0 +1,1001 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ridge Runner</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,700;12..96,800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --sky-top: #1d1840;
+    --dusk: #f2a7b5;
+    --lantern: #ffc94d;
+    --ink: #fff6ea;
+    --ink-soft: rgba(255, 246, 234, 0.72);
+    --panel: rgba(29, 24, 64, 0.55);
+    box-sizing: border-box;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) { --panel: rgba(20, 16, 44, 0.65); }
+  }
+  :root[data-theme="dark"] { --panel: rgba(20, 16, 44, 0.65); }
+  html { scroll-padding-top: env(safe-area-inset-top, 0px); }
+  html, body { height: 100%; margin: 0; overflow: hidden; background: var(--sky-top); }
+  body {
+    font-family: "Bricolage Grotesque", system-ui, -apple-system, "Segoe UI", sans-serif;
+    color: var(--ink);
+    -webkit-user-select: none; user-select: none;
+    touch-action: none;
+  }
+  canvas { position: fixed; inset: 0; display: block; width: 100%; height: 100%; }
+
+  .hud {
+    position: fixed; top: 0; left: 0; right: 0;
+    padding: calc(env(safe-area-inset-top, 0px) + 16px) 20px 0;
+    display: flex; justify-content: space-between; align-items: flex-start;
+    pointer-events: none; z-index: 2;
+  }
+  .score { font-size: clamp(2rem, 6vw, 3.25rem); font-weight: 800; line-height: 1; letter-spacing: -0.02em; }
+  .best { font-size: 0.95rem; color: var(--ink-soft); margin-top: 4px; }
+  .lanterns { font-size: 1.1rem; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+  .lanterns i {
+    width: 12px; height: 16px; border-radius: 4px 4px 6px 6px; background: var(--lantern);
+    box-shadow: 0 0 12px var(--lantern); display: inline-block;
+  }
+  .lives { display: flex; justify-content: flex-end; gap: 5px; margin-top: 8px; font-size: 1.25rem; line-height: 1; }
+  .lives span { color: var(--dusk); text-shadow: 0 0 10px rgba(242, 167, 181, 0.8); transition: opacity 0.3s, transform 0.3s; }
+  .lives span.lost { opacity: 0.22; text-shadow: none; transform: scale(0.85); }
+
+  .screen {
+    position: fixed; inset: 0; z-index: 3;
+    display: flex; align-items: safe center; justify-content: center; padding: 24px;
+    overflow-y: auto; -webkit-overflow-scrolling: touch;
+  }
+  .screen[hidden] { display: none; }
+  .card {
+    width: 100%; max-width: 30rem; text-align: left; margin: auto;
+    background: var(--panel); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+    padding: 28px 28px 24px; border-radius: 22px;
+  }
+  .name { display: flex; gap: 12px; align-items: center; margin: 0 0 16px; }
+  .name label { font-weight: 700; font-size: 0.95rem; color: var(--ink-soft); white-space: nowrap; }
+  input[type="text"] {
+    font: inherit; font-weight: 700; font-size: 1.05rem; color: var(--ink);
+    background: rgba(255, 246, 234, 0.08); border: 2px solid rgba(255, 246, 234, 0.25);
+    border-radius: 12px; padding: 10px 14px; flex: 1; min-width: 0;
+    -webkit-user-select: text; user-select: text; touch-action: auto;
+  }
+  input[type="text"]::placeholder { color: var(--ink-soft); opacity: 0.6; }
+  input[type="text"]:focus-visible { outline: 3px solid var(--lantern); outline-offset: 2px; }
+  .actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  button.ghost { background: transparent; color: var(--ink); box-shadow: inset 0 0 0 2px rgba(255, 246, 234, 0.3); }
+  .board { margin: 20px 0 4px; }
+  .board h3 {
+    font-size: 0.82rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em;
+    color: var(--ink-soft); margin: 0 0 8px;
+  }
+  .board ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 3px; max-height: 34vh; overflow-y: auto; }
+  .board li {
+    display: grid; grid-template-columns: 1.7rem minmax(0, 1fr) auto auto; gap: 10px; align-items: baseline;
+    padding: 6px 10px; border-radius: 10px; font-size: 0.98rem;
+  }
+  .board li:nth-child(odd) { background: rgba(255, 246, 234, 0.05); }
+  .board li.me { background: rgba(255, 201, 77, 0.16); box-shadow: inset 0 0 0 2px var(--lantern); }
+  .board li.empty { display: block; color: var(--ink-soft); font-size: 0.95rem; }
+  .board .rank { color: var(--ink-soft); font-weight: 700; font-variant-numeric: tabular-nums; }
+  .board .who { font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .board .pts { font-weight: 800; font-variant-numeric: tabular-nums; }
+  .board .meta { color: var(--ink-soft); font-size: 0.85rem; display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+  .board .meta i { width: 7px; height: 10px; border-radius: 2px 2px 4px 4px; background: var(--lantern); box-shadow: 0 0 6px var(--lantern); display: inline-block; }
+  .over-actions { margin-top: 18px; }
+  h1 {
+    font-size: clamp(3rem, 12vw, 5.5rem); font-weight: 800; line-height: 0.9;
+    letter-spacing: -0.04em; margin: 0 0 16px;
+    background: linear-gradient(180deg, var(--ink) 40%, var(--dusk));
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  h2 { font-size: 2.2rem; font-weight: 800; margin: 0 0 8px; letter-spacing: -0.02em; }
+  p { margin: 0 0 14px; line-height: 1.5; color: var(--ink-soft); font-size: 1.02rem; }
+  .keys { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; margin: 18px 0 22px; font-size: 0.98rem; }
+  .keys b { color: var(--ink); font-weight: 700; }
+  button {
+    font: inherit; font-weight: 700; font-size: 1.1rem;
+    background: var(--lantern); color: #2a1f00; border: 0;
+    padding: 14px 26px; border-radius: 999px; cursor: pointer;
+  }
+  button:focus-visible { outline: 3px solid var(--ink); outline-offset: 3px; }
+  .level { font-size: 1rem; font-weight: 700; color: var(--ink-soft); margin-top: 6px; text-align: right; }
+  .banner {
+    position: fixed; left: 0; right: 0; top: 30%; z-index: 2; text-align: center;
+    pointer-events: none; opacity: 0; transform: scale(0.9);
+    transition: opacity 0.35s ease, transform 0.35s ease;
+  }
+  .banner.show { opacity: 1; transform: scale(1); }
+  .banner strong { display: block; font-size: clamp(3rem, 12vw, 6rem); font-weight: 800; letter-spacing: -0.04em; line-height: 1; }
+  .banner span { font-size: 1.1rem; color: var(--ink); opacity: 0.85; }
+  .powers { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; margin-top: 10px; }
+  .pill {
+    position: relative; overflow: hidden; font-size: 0.9rem; font-weight: 700;
+    padding: 4px 12px 6px; border-radius: 999px; background: var(--panel); border: 2px solid var(--c);
+  }
+  .pill[hidden] { display: none; }
+  .pill span { position: absolute; left: 0; bottom: 0; height: 3px; background: var(--c); width: var(--w, 100%); }
+  .final { font-size: 3.5rem; font-weight: 800; color: var(--ink); line-height: 1; margin: 6px 0 4px; }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<div class="hud" id="hud" hidden>
+  <div>
+    <div class="score" id="score">0</div>
+    <div class="best" id="best"></div>
+  </div>
+  <div>
+    <div class="lanterns"><i></i><span id="lcount">0</span></div>
+    <div class="lives" id="lives" aria-label="Lives"></div>
+    <div class="level" id="levelEl">Level 1</div>
+    <div class="powers">
+      <div class="pill" id="pShield" hidden style="--c:#5fe3ff">Shield</div>
+      <div class="pill" id="pMagnet" hidden style="--c:#ff5a6e">Magnet<span></span></div>
+      <div class="pill" id="pBoost" hidden style="--c:#ff8fd8">Boost<span></span></div>
+    </div>
+  </div>
+</div>
+<div class="banner" id="banner"><strong id="bannerTitle">Level 2</strong><span id="bannerSub"></span></div>
+
+<div class="screen" id="start">
+  <div class="card">
+    <h1>Ridge<br>Runner</h1>
+    <p>Run the ridge at dusk. Dodge the boulders, slip past the stone pillars, and grab every lantern you can. It gets faster the longer you last.</p>
+    <div class="keys">
+      <b>← →</b><span>Switch lanes (or swipe)</span>
+      <b>Space ↑</b><span>Jump over boulders (or tap)</span>
+      <b>Pillars</b><span>Too tall to jump. Change lanes.</span>
+      <b>Lives</b><span>Three per run. A crash costs one and clears the way.</span>
+      <b>Power-ups</b><span>Shield blocks one crash, magnet pulls in lanterns, boost smashes through everything.</span>
+    </div>
+    <div class="name">
+      <label for="name">Runner</label>
+      <input type="text" id="name" maxlength="12" autocomplete="off" autocapitalize="words" spellcheck="false" placeholder="Your name">
+    </div>
+    <div class="actions">
+      <button id="play">Start running</button>
+    </div>
+    <div class="board" id="startBoard"><h3>Scoreboard</h3><ol></ol></div>
+  </div>
+</div>
+
+<div class="screen" id="over" hidden>
+  <div class="card">
+    <h2>You fell</h2>
+    <div class="final" id="final">0</div>
+    <p id="overNote"></p>
+    <div class="board" id="overBoard"><h3>Scoreboard</h3><ol></ol></div>
+    <div class="actions over-actions">
+      <button id="again">Run again</button>
+      <button class="ghost" id="menu" type="button">Change runner</button>
+    </div>
+  </div>
+</div>
+
+<script src="three.min.js"></script>
+<script>
+// Local copy first so the demo works offline; fall back to the CDN if it's missing
+if (!window.THREE) document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"><\/script>');
+</script>
+<script>
+(() => {
+  if (!window.THREE) {
+    document.querySelector('#start p').textContent = 'Could not load the 3D engine. Check that three.min.js sits next to this file, or reconnect and reload.';
+    document.getElementById('play').disabled = true;
+    return;
+  }
+  const LANES = [-2.4, 0, 2.4];
+  const SKY_TOP = 0x1d1840, HORIZON = 0xe7879a;
+
+  // ---------- Renderer & scene ----------
+  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.shadowMap.enabled = true;
+  document.body.prepend(renderer.domElement);
+
+  const scene = new THREE.Scene();
+  scene.fog = new THREE.Fog(HORIZON, 30, 95);
+
+  // Gradient sky dome
+  const skyGeo = new THREE.SphereGeometry(200, 32, 16);
+  const skyMat = new THREE.ShaderMaterial({
+    side: THREE.BackSide, depthWrite: false, fog: false,
+    uniforms: { top: { value: new THREE.Color(SKY_TOP) }, bottom: { value: new THREE.Color(HORIZON) } },
+    vertexShader: `varying vec3 vP; void main(){ vP = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
+    fragmentShader: `uniform vec3 top; uniform vec3 bottom; varying vec3 vP;
+      void main(){ float h = clamp(vP.y * 2.2 + 0.05, 0.0, 1.0); gl_FragColor = vec4(mix(bottom, top, pow(h, 0.7)), 1.0); }`
+  });
+  scene.add(new THREE.Mesh(skyGeo, skyMat));
+
+  // Low sun
+  const sun = new THREE.Mesh(new THREE.CircleGeometry(9, 48), new THREE.MeshBasicMaterial({ color: 0xffd9a0, fog: false }));
+  sun.position.set(0, 6, -150);
+  scene.add(sun);
+
+  const camera = new THREE.PerspectiveCamera(62, 1, 0.1, 400);
+  camera.position.set(0, 4.2, 8.5);
+  camera.lookAt(0, 1, -6);
+
+  scene.add(new THREE.HemisphereLight(0xffd6c8, 0x2b2156, 0.85));
+  const key = new THREE.DirectionalLight(0xffe2b8, 0.9);
+  key.position.set(-6, 12, 6);
+  key.castShadow = true;
+  key.shadow.mapSize.set(1024, 1024);
+  Object.assign(key.shadow.camera, { left: -8, right: 8, top: 12, bottom: -12, near: 1, far: 40 });
+  scene.add(key);
+
+  // ---------- Ground (scrolling stripe texture) ----------
+  const tc = document.createElement('canvas'); tc.width = 256; tc.height = 256;
+  const g = tc.getContext('2d');
+  g.fillStyle = '#b0b0b0'; g.fillRect(0, 0, 256, 256);
+  g.fillStyle = '#c2c2c2'; g.fillRect(0, 0, 256, 128);
+  g.fillStyle = 'rgba(255,255,255,0.9)';
+  [85, 171].forEach(x => g.fillRect(x - 2, 0, 4, 256));
+  const groundTex = new THREE.CanvasTexture(tc);
+  groundTex.wrapS = groundTex.wrapT = THREE.RepeatWrapping;
+  const GROUND_LEN = 160, TILE = 4;
+  groundTex.repeat.set(1, GROUND_LEN / TILE);
+  const ground = new THREE.Mesh(
+    new THREE.PlaneGeometry(7.2, GROUND_LEN),
+    new THREE.MeshLambertMaterial({ map: groundTex })
+  );
+  ground.rotation.x = -Math.PI / 2;
+  ground.position.z = -GROUND_LEN / 2 + 10;
+  ground.receiveShadow = true;
+  scene.add(ground);
+
+  // Ridge flanks falling away
+  const flankMat = new THREE.MeshLambertMaterial({ color: 0x3a2b5e, flatShading: true });
+  [-1, 1].forEach(s => {
+    const f = new THREE.Mesh(new THREE.PlaneGeometry(40, GROUND_LEN), flankMat);
+    f.rotation.x = -Math.PI / 2; f.rotation.y = s * 0.35;
+    f.position.set(s * 23.5, -6.5, -GROUND_LEN / 2 + 10);
+    scene.add(f);
+  });
+
+  // ---------- Scenery peaks ----------
+  const peaks = [];
+  const peakColors = [0x3b2d63, 0x4a3570, 0x2f2555];
+  for (let i = 0; i < 26; i++) {
+    const h = 6 + Math.random() * 14;
+    const m = new THREE.Mesh(
+      new THREE.ConeGeometry(3 + Math.random() * 5, h, 5 + Math.floor(Math.random() * 3)),
+      new THREE.MeshLambertMaterial({ color: peakColors[i % 3], flatShading: true })
+    );
+    const side = i % 2 ? 1 : -1;
+    m.position.set(side * (12 + Math.random() * 22), h / 2 - 8, -Math.random() * 110);
+    m.rotation.y = Math.random() * Math.PI;
+    scene.add(m); peaks.push(m);
+  }
+
+  // ---------- Player: original "mountain courier" v3 (smooth, rounded) ----------
+  const player = new THREE.Group();
+  const S = (c, o) => new THREE.MeshStandardMaterial(Object.assign({ color: c, roughness: 0.5, metalness: 0.05 }, o || {}));
+  const jacketMat = S(0xffc94d, { roughness: 0.32 }), jacketDark = S(0xe8ab2c, { roughness: 0.4 }),
+        pantsMat = S(0x27304f, { roughness: 0.75 }), shoeMat = S(0xf6f1ea, { roughness: 0.35 }),
+        skinMat = S(0xc68a5e, { roughness: 0.65 }), beanieMat = S(0xe0566b, { roughness: 0.85 }),
+        cuffMat = S(0xc24159, { roughness: 0.85 }), hairMat = S(0x2a1a14, { roughness: 0.8 }),
+        packMat = S(0x2e7d74, { roughness: 0.45 }), packDark = S(0x1f5a54), matMat = S(0xfff1e0),
+        gloveMat = S(0x241d4a, { roughness: 0.6 }),
+        glowTeal = new THREE.MeshBasicMaterial({ color: 0x7ff6ff }),
+        reflect = S(0xffffff, { emissive: 0xfff2c4, emissiveIntensity: 0.9, roughness: 0.2 }),
+        lensMat = S(0x7ff6ff, { emissive: 0x2fb6d6, emissiveIntensity: 0.8, metalness: 0.7, roughness: 0.08 }),
+        scarfMat = S(0x7b5cff, { roughness: 0.55, emissive: 0x2a1a66, emissiveIntensity: 0.35, side: THREE.DoubleSide });
+
+  function add(mesh, x, y, z, parent) {
+    mesh.position.set(x, y, z); mesh.castShadow = true; (parent || player).add(mesh); return mesh;
+  }
+  function ball(r, mat, x, y, z, parent, sx, sy, sz) {
+    const m = add(new THREE.Mesh(new THREE.SphereGeometry(r, 24, 18), mat), x, y, z, parent);
+    if (sx) m.scale.set(sx, sy, sz); return m;
+  }
+  // Tapered capsule, vertical, centred at y (r128 has no CapsuleGeometry)
+  function capsule(rTop, rBot, len, mat, x, y, z, parent) {
+    const g = new THREE.Group(); g.position.set(x, y, z); (parent || player).add(g);
+    add(new THREE.Mesh(new THREE.CylinderGeometry(rTop, rBot, len, 20), mat), 0, 0, 0, g);
+    add(new THREE.Mesh(new THREE.SphereGeometry(rTop, 20, 14), mat), 0, len / 2, 0, g);
+    add(new THREE.Mesh(new THREE.SphereGeometry(rBot, 20, 14), mat), 0, -len / 2, 0, g);
+    return g;
+  }
+  function roundBox(w, h, d, r, mat, x, y, z, parent) {
+    const iw = w - 2 * r, ih = h - 2 * r, rr = Math.min(r, iw / 2, ih / 2) * 0.9;
+    const sh = new THREE.Shape();
+    sh.moveTo(-iw / 2 + rr, -ih / 2);
+    sh.lineTo(iw / 2 - rr, -ih / 2); sh.quadraticCurveTo(iw / 2, -ih / 2, iw / 2, -ih / 2 + rr);
+    sh.lineTo(iw / 2, ih / 2 - rr);  sh.quadraticCurveTo(iw / 2, ih / 2, iw / 2 - rr, ih / 2);
+    sh.lineTo(-iw / 2 + rr, ih / 2); sh.quadraticCurveTo(-iw / 2, ih / 2, -iw / 2, ih / 2 - rr);
+    sh.lineTo(-iw / 2, -ih / 2 + rr); sh.quadraticCurveTo(-iw / 2, -ih / 2, -iw / 2 + rr, -ih / 2);
+    const geo = new THREE.ExtrudeGeometry(sh, { depth: Math.max(0.001, d - 2 * r), bevelEnabled: true, bevelThickness: r, bevelSize: r, bevelSegments: 5, curveSegments: 8 });
+    geo.center(); geo.computeVertexNormals();
+    return add(new THREE.Mesh(geo, mat), x, y, z, parent);
+  }
+
+  const body = new THREE.Group(); player.add(body); // squashes on landing
+
+  // Legs: hip → tapered thigh → knee → shin → rounded trail shoe with glowing sole
+  const legs = [-0.15, 0.15].map(x => {
+    const hip = new THREE.Group(); hip.position.set(x, 0.92, 0); body.add(hip);
+    capsule(0.125, 0.1, 0.28, pantsMat, 0, -0.22, 0, hip);
+    const knee = new THREE.Group(); knee.position.y = -0.44; hip.add(knee);
+    capsule(0.098, 0.075, 0.26, pantsMat, 0, -0.19, 0, knee);
+    const band = add(new THREE.Mesh(new THREE.TorusGeometry(0.085, 0.02, 8, 20), reflect), 0, -0.27, 0, knee);
+    band.rotation.x = Math.PI / 2;
+    roundBox(0.22, 0.14, 0.4, 0.06, shoeMat, 0, -0.405, -0.07, knee);
+    roundBox(0.235, 0.035, 0.41, 0.015, glowTeal, 0, -0.47, -0.07, knee);
+    return { hip, knee };
+  });
+
+  // Torso: puffer jacket built from soft stacked bands
+  const torso = new THREE.Group(); torso.position.y = 1.2; body.add(torso);
+  ball(1, jacketMat, 0, 0.3, 0, torso, 0.37, 0.15, 0.26);
+  ball(1, jacketDark, 0, 0.13, 0, torso, 0.35, 0.14, 0.25);
+  ball(1, jacketMat, 0, -0.03, 0, torso, 0.32, 0.13, 0.23);
+  ball(1, jacketDark, 0, -0.18, 0, torso, 0.28, 0.12, 0.21);
+  const collar = add(new THREE.Mesh(new THREE.TorusGeometry(0.17, 0.07, 14, 28), jacketMat), 0, 0.44, 0, torso);
+  collar.rotation.x = Math.PI / 2;
+
+  // Backpack: rounded pack, pocket, reflective strip, rolled mat, blinking beacon
+  roundBox(0.5, 0.6, 0.28, 0.09, packMat, 0, 0.08, 0.34, torso);
+  roundBox(0.36, 0.24, 0.12, 0.05, packDark, 0, -0.06, 0.5, torso);
+  roundBox(0.38, 0.04, 0.05, 0.015, reflect, 0, 0.12, 0.49, torso);
+  const roll = add(new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.11, 0.6, 24), matMat), 0, 0.46, 0.34, torso);
+  roll.rotation.z = Math.PI / 2;
+  add(new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.46, 8), gloveMat), 0.19, 0.62, 0.42, torso);
+  const beacon = ball(0.045, glowTeal, 0.19, 0.86, 0.42, torso);
+
+  // Arms: puffy upper arm → elbow → tapered forearm → round glove
+  const arms = [-1, 1].map(side => {
+    const sh = new THREE.Group(); sh.position.set(side * 0.37, 0.26, 0); torso.add(sh);
+    ball(1, jacketMat, 0, -0.12, 0, sh, 0.12, 0.2, 0.12);
+    const cuffBand = add(new THREE.Mesh(new THREE.TorusGeometry(0.095, 0.02, 8, 20), reflect), 0, -0.22, 0, sh);
+    cuffBand.rotation.x = Math.PI / 2;
+    const el = new THREE.Group(); el.position.y = -0.3; sh.add(el);
+    capsule(0.09, 0.075, 0.18, jacketMat, 0, -0.12, 0, el);
+    ball(0.085, gloveMat, 0, -0.3, 0, el);
+    return { sh, el };
+  });
+
+  // Head: beanie with folded cuff and pom-pom, hair tufts at the back, goggles on the forehead
+  const head = new THREE.Group(); head.position.y = 0.7; torso.add(head);
+  ball(0.24, skinMat, 0, 0, 0, head);
+  add(new THREE.Mesh(new THREE.SphereGeometry(0.255, 28, 14, 0, Math.PI * 2, 0, Math.PI / 2), beanieMat), 0, 0.04, 0, head);
+  const cuff = add(new THREE.Mesh(new THREE.TorusGeometry(0.245, 0.045, 12, 32), cuffMat), 0, 0.05, 0, head);
+  cuff.rotation.x = Math.PI / 2;
+  ball(0.085, matMat, 0, 0.33, 0, head);
+  [[-0.1, -0.02], [0, -0.05], [0.1, -0.02]].forEach(([x, y]) => ball(1, hairMat, x, y, 0.19, head, 0.07, 0.09, 0.06));
+  const strap = add(new THREE.Mesh(new THREE.TorusGeometry(0.262, 0.022, 8, 32), gloveMat), 0, 0.15, 0, head);
+  strap.rotation.x = Math.PI / 2;
+  [-0.085, 0.085].forEach(x => {
+    ball(1, lensMat, x, 0.16, -0.235, head, 0.075, 0.06, 0.035);
+    const rim = add(new THREE.Mesh(new THREE.TorusGeometry(0.075, 0.016, 8, 24), gloveMat), x, 0.16, -0.23, head);
+    rim.scale.y = 0.82;
+  });
+
+  // Scarf: a smooth ribbon that streams out behind and ripples with speed
+  const RIB = 14;
+  const ribGeo = new THREE.BufferGeometry();
+  const ribPos = new Float32Array((RIB + 1) * 2 * 3);
+  ribGeo.setAttribute('position', new THREE.BufferAttribute(ribPos, 3));
+  const ribIdx = [];
+  for (let i = 0; i < RIB; i++) { const a = i * 2; ribIdx.push(a, a + 2, a + 1, a + 1, a + 2, a + 3); }
+  ribGeo.setIndex(ribIdx);
+  const ribbon = new THREE.Mesh(ribGeo, scarfMat);
+  ribbon.castShadow = true; ribbon.frustumCulled = false;
+  body.add(ribbon);
+  ball(0.075, scarfMat, 0.1, 1.64, 0.2, body); // knot at the neck
+  function updateScarf(v, airborne) {
+    const stretch = Math.min(1.6, 0.6 + v / 30);
+    for (let i = 0; i <= RIB; i++) {
+      const u = i / RIB;
+      const x = 0.1 + Math.sin(t * 8 - u * 5) * 0.08 * u;
+      const y = 1.64 - u * 0.28 * (1.8 - stretch) + Math.sin(t * 13 - u * 6) * 0.07 * u + (airborne ? u * 0.25 : 0);
+      const z = 0.22 + u * 1.0 * stretch;
+      const w = 0.17 * (1 - u * 0.3);
+      const a = Math.sin(t * 10 - u * 4) * 0.6 * u;
+      const ca = Math.cos(a) * w / 2, sa = Math.sin(a) * w / 2;
+      ribPos.set([x - ca, y - sa, z, x + ca, y + sa, z], i * 6);
+    }
+    ribGeo.attributes.position.needsUpdate = true;
+    ribGeo.computeVertexNormals();
+  }
+
+  const glow = new THREE.PointLight(0x9ff4ff, 0.7, 7);
+  glow.position.set(0, 1.9, -0.8);
+  player.add(glow);
+  scene.add(player);
+  let runPhase = 0, wasAirborne = false, squash = 0, lastStep = 0;
+
+  // ---------- Particles: footstep dust, landing puffs, boost streaks ----------
+  const puffGeo = new THREE.IcosahedronGeometry(0.12, 0);
+  const puffs = [];
+  for (let i = 0; i < 48; i++) {
+    const m = new THREE.Mesh(puffGeo, new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0, depthWrite: false }));
+    m.visible = false; scene.add(m);
+    puffs.push({ m, life: 0, max: 1, vx: 0, vy: 0, grow: 1 });
+  }
+  let puffIdx = 0;
+  function puff(x, y, z, color, opts) {
+    const p = puffs[puffIdx = (puffIdx + 1) % puffs.length];
+    p.m.position.set(x, y, z); p.m.material.color.setHex(color);
+    p.max = p.life = (opts && opts.life) || 0.5;
+    p.vx = (opts && opts.vx) || (Math.random() - 0.5) * 0.8;
+    p.vy = (opts && opts.vy) || 0.6 + Math.random() * 0.5;
+    p.grow = (opts && opts.grow) || 2.2;
+    p.m.scale.setScalar((opts && opts.size) || 1);
+    p.m.visible = true;
+  }
+
+  // ---------- Obstacle factories ----------
+  const rockGeo = new THREE.DodecahedronGeometry(0.85, 0);
+  const rockMat = new THREE.MeshLambertMaterial({ color: 0x8a6a8f, flatShading: true });
+  const pillarGeo = new THREE.CylinderGeometry(0.75, 0.95, 4.2, 6);
+  const pillarMat = new THREE.MeshLambertMaterial({ color: 0x6d5584, flatShading: true });
+  const lanternGeo = new THREE.OctahedronGeometry(0.38, 0);
+  const lanternMat = new THREE.MeshBasicMaterial({ color: 0xffc94d });
+
+  function makeRock() {
+    const m = new THREE.Mesh(rockGeo, rockMat);
+    m.scale.set(1, 0.85, 1); m.position.y = 0.72;
+    m.rotation.set(Math.random(), Math.random(), Math.random());
+    m.castShadow = true; return m;
+  }
+  function makePillar() {
+    const m = new THREE.Mesh(pillarGeo, pillarMat);
+    m.position.y = 2.1; m.castShadow = true; return m;
+  }
+  function makeLantern() {
+    const m = new THREE.Mesh(lanternGeo, lanternMat);
+    m.position.y = 1.1; return m;
+  }
+
+  // ---------- Power-ups ----------
+  const POWER = {
+    shield: { color: 0x5fe3ff },
+    magnet: { color: 0xff5a6e, dur: 8 },
+    boost:  { color: 0xff8fd8, dur: 4 },
+  };
+  function makePower(kind) {
+    const grp = new THREE.Group();
+    const mat = new THREE.MeshBasicMaterial({ color: POWER[kind].color });
+    let icon;
+    if (kind === 'shield') {
+      icon = new THREE.Mesh(new THREE.IcosahedronGeometry(0.4, 1), new THREE.MeshBasicMaterial({ color: POWER.shield.color, wireframe: true }));
+    } else if (kind === 'magnet') {
+      icon = new THREE.Mesh(new THREE.TorusGeometry(0.32, 0.12, 8, 16, Math.PI), mat);
+      icon.rotation.z = Math.PI; // horseshoe, open side up
+    } else {
+      icon = new THREE.Mesh(new THREE.ConeGeometry(0.32, 0.7, 4), mat); // upward arrowhead
+    }
+    grp.add(icon);
+    grp.add(new THREE.Mesh(new THREE.TorusGeometry(0.62, 0.045, 6, 28), mat));
+    grp.position.y = 1.25;
+    return grp;
+  }
+  const bubble = new THREE.Mesh(
+    new THREE.SphereGeometry(1.25, 20, 14),
+    new THREE.MeshBasicMaterial({ color: POWER.shield.color, transparent: true, opacity: 0.2, depthWrite: false })
+  );
+  bubble.position.y = 1.0; bubble.visible = false; player.add(bubble);
+
+  // ---------- Levels ----------
+  const LEVEL_POINTS = 1000;
+  // Each level: name shown in the banner + a palette the world fades into
+  const LEVELS = [
+    { name: 'Dusk ridge',    top: 0x1d1840, horizon: 0xe7879a, sun: 0xffd9a0, ground: 0x5b3f73 },
+    { name: 'Ember pass',    top: 0x2a0f2e, horizon: 0xf07a4a, sun: 0xffb36b, ground: 0x6b3a4a },
+    { name: 'Frost col',     top: 0x10244a, horizon: 0x8fc3e6, sun: 0xeaf6ff, ground: 0x4a5f86 },
+    { name: 'Night summit',  top: 0x05061a, horizon: 0x3b3f7a, sun: 0xd8dcff, ground: 0x2c2c55 },
+    { name: 'Storm crest',   top: 0x0d0d14, horizon: 0x5d4a6e, sun: 0xb9a6ff, ground: 0x302838 },
+  ];
+  function levelParams(lv) {
+    const n = lv - 1;
+    return {
+      maxSpeed:     Math.min(58, 30 + n * 5),       // top speed rises each level
+      accel:        0.35 + n * 0.08,                // reaches it faster
+      gapScale:     Math.max(0.5, 1 - n * 0.1),     // rows arrive closer together
+      doubleChance: Math.min(0.75, 0.15 + n * 0.14),// two lanes blocked more often
+      pillarChance: Math.min(0.6, 0.22 + n * 0.08), // more unjumpable pillars
+      lanternChance: Math.max(0.4, 0.7 - n * 0.06), // lanterns get scarcer
+    };
+  }
+  const palette = { from: LEVELS[0], to: LEVELS[0], k: 1 };
+  const cTmp = new THREE.Color(), cA = new THREE.Color(), cB = new THREE.Color();
+  function mixHex(a, b, k) { return cTmp.copy(cA.setHex(a)).lerp(cB.setHex(b), k); }
+  function setPalette(lv, instant) {
+    const target = LEVELS[Math.min(lv - 1, LEVELS.length - 1)];
+    palette.from = instant ? target : currentPaletteSnapshot();
+    palette.to = target; palette.k = instant ? 1 : 0;
+    applyPalette();
+  }
+  function currentPaletteSnapshot() {
+    const k = palette.k, f = palette.from, t = palette.to;
+    return {
+      top: mixHex(f.top, t.top, k).getHex(), horizon: mixHex(f.horizon, t.horizon, k).getHex(),
+      sun: mixHex(f.sun, t.sun, k).getHex(), ground: mixHex(f.ground, t.ground, k).getHex(),
+    };
+  }
+  function applyPalette() {
+    const k = palette.k, f = palette.from, t = palette.to;
+    skyMat.uniforms.top.value.copy(mixHex(f.top, t.top, k));
+    skyMat.uniforms.bottom.value.copy(mixHex(f.horizon, t.horizon, k));
+    scene.fog.color.copy(mixHex(f.horizon, t.horizon, k));
+    sun.material.color.copy(mixHex(f.sun, t.sun, k));
+    ground.material.color.copy(mixHex(f.ground, t.ground, k)).multiplyScalar(1.6);
+  }
+
+  // ---------- Game state ----------
+  let objects = [];
+  let level = 1, params = levelParams(1), bannerTimer = 0;
+  let state = 'idle';
+  let lane = 1, px = 0, py = 0, vy = 0;
+  let speed, distance, lanterns, nextSpawn, t = 0, shake = 0;
+  let shield = false, magnetT = 0, boostT = 0, invulnT = 0, baseFov = 62;
+  const MAX_LIVES = 3;
+  let lives = MAX_LIVES, knock = 0; // knock: how far the runner is thrown back on the fatal crash
+  let best = 0;
+  try { best = Number(localStorage.getItem('ridge-best')) || 0; } catch (e) {}
+
+  const $ = id => document.getElementById(id);
+  const scoreEl = $('score'), bestEl = $('best'), lEl = $('lcount');
+
+  function currentScore() { return Math.floor(distance) + lanterns * 25; }
+
+  // ---------- Lives ----------
+  const livesEl = $('lives');
+  function updateLives() {
+    livesEl.textContent = '';
+    for (let i = 0; i < MAX_LIVES; i++) {
+      const s = document.createElement('span');
+      s.textContent = '♥';
+      if (i >= lives) s.className = 'lost';
+      livesEl.appendChild(s);
+    }
+  }
+  // Ring of debris where something got hit
+  function burst(x, z, color, n) {
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2;
+      puff(x + Math.cos(a) * 0.4, 0.5 + Math.random() * 0.9, z + Math.sin(a) * 0.4, color,
+        { vx: Math.cos(a) * 2.5, vy: 1 + Math.random(), life: 0.55, size: 1.4 });
+    }
+  }
+  // Remove obstacle i with a debris burst (boost, shield and life-loss all clear the way)
+  function smash(o, i) {
+    burst(o.mesh.position.x, o.mesh.position.z, o.type === 'pillar' ? 0x9d86b3 : 0xb497b9, 8);
+    scene.remove(o.mesh); objects.splice(i, 1);
+  }
+
+  // ---------- Sound: tiny synth, no audio files needed ----------
+  let ac = null;
+  function audioOn() {
+    if (!ac) { try { ac = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} }
+    if (ac && ac.state === 'suspended') ac.resume();
+  }
+  function tone(freq, dur, o) {
+    if (!ac) return; o = o || {};
+    const osc = ac.createOscillator(), g = ac.createGain(), t0 = ac.currentTime + (o.delay || 0);
+    osc.type = o.type || 'sine';
+    osc.frequency.setValueAtTime(freq, t0);
+    if (o.slide) osc.frequency.exponentialRampToValueAtTime(o.slide, t0 + dur);
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(o.vol || 0.12, t0 + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    osc.connect(g).connect(ac.destination);
+    osc.start(t0); osc.stop(t0 + dur + 0.02);
+  }
+  function thud(dur, vol, cutoff) {
+    if (!ac) return;
+    const n = Math.floor(ac.sampleRate * dur), buf = ac.createBuffer(1, n, ac.sampleRate), d = buf.getChannelData(0);
+    for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / n);
+    const src = ac.createBufferSource(); src.buffer = buf;
+    const f = ac.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = cutoff || 900;
+    const g = ac.createGain(); g.gain.value = vol;
+    src.connect(f).connect(g).connect(ac.destination); src.start();
+  }
+  const sfx = {
+    lantern() { tone(880, 0.09, { type: 'triangle' }); tone(1320, 0.14, { type: 'triangle', vol: 0.1, delay: 0.05 }); },
+    power()   { [523, 659, 784, 1047].forEach((f, i) => tone(f, 0.13, { type: 'square', vol: 0.06, delay: i * 0.06 })); },
+    jump()    { tone(300, 0.16, { slide: 620, vol: 0.07 }); },
+    smash()   { thud(0.12, 0.18, 1400); },
+    shield()  { tone(520, 0.22, { slide: 240, vol: 0.12 }); thud(0.1, 0.12); },
+    hit()     { thud(0.25, 0.3); tone(170, 0.32, { type: 'sawtooth', slide: 55, vol: 0.14 }); },
+    over()    { thud(0.4, 0.35, 600); [220, 185, 147, 110].forEach((f, i) => tone(f, 0.26, { type: 'sawtooth', vol: 0.11, delay: 0.15 + i * 0.18 })); },
+    level()   { [660, 880, 1100, 1320, 1760].forEach((f, i) => tone(f, 0.18, { type: 'triangle', vol: 0.09, delay: i * 0.07 })); },
+  };
+
+  // ---------- Scoreboard: local top 10, keyed by runner name ----------
+  const BOARD_KEY = 'ridge-board', NAME_KEY = 'ridge-name', BOARD_SIZE = 10, NAME_MAX = 12;
+  let board = [];
+  try {
+    const raw = JSON.parse(localStorage.getItem(BOARD_KEY) || '[]');
+    if (Array.isArray(raw)) board = raw.filter(e => e && typeof e.score === 'number' && typeof e.name === 'string');
+  } catch (e) {}
+  if (board.length) best = Math.max(best, board[0].score);
+
+  const nameInput = $('name');
+  try { nameInput.value = (localStorage.getItem(NAME_KEY) || '').slice(0, NAME_MAX); } catch (e) {}
+  let runnerName = 'Runner';
+  function readName() {
+    const typed = nameInput.value.trim().slice(0, NAME_MAX);
+    try { localStorage.setItem(NAME_KEY, typed); } catch (e) {}
+    return typed || 'Runner';
+  }
+  function saveBoard() { try { localStorage.setItem(BOARD_KEY, JSON.stringify(board)); } catch (e) {} }
+  // Insert a finished run; returns its 0-based rank, or -1 if it missed the board
+  function recordRun(entry) {
+    board.push(entry);
+    board.sort((a, b) => b.score - a.score || a.at - b.at);
+    board = board.slice(0, BOARD_SIZE);
+    saveBoard();
+    return board.indexOf(entry);
+  }
+  function renderBoard(container, highlight) {
+    const ol = container.querySelector('ol');
+    ol.textContent = '';
+    if (!board.length) {
+      const li = document.createElement('li');
+      li.className = 'empty'; li.textContent = 'No runs yet. Yours will be the first.';
+      ol.appendChild(li); return;
+    }
+    board.forEach((e, i) => {
+      const li = document.createElement('li');
+      if (e === highlight) li.className = 'me';
+      const cell = (cls, text) => { const s = document.createElement('span'); s.className = cls; s.textContent = text; li.appendChild(s); return s; };
+      cell('rank', i + 1);
+      cell('who', e.name);
+      cell('pts', e.score);
+      const meta = cell('meta', `Lv ${e.level || 1} · ${e.lanterns || 0} `);
+      meta.appendChild(document.createElement('i'));
+      ol.appendChild(li);
+    });
+  }
+
+  function reset() {
+    objects.forEach(o => scene.remove(o.mesh));
+    objects = [];
+    lane = 1; px = 0; py = 0; vy = 0;
+    speed = 13; distance = 0; lanterns = 0; nextSpawn = 30;
+    level = 1; params = levelParams(1); bannerTimer = 0;
+    document.getElementById('levelEl').textContent = 'Level 1';
+    document.getElementById('banner').classList.remove('show');
+    setPalette(1, true);
+    shield = false; magnetT = 0; boostT = 0; invulnT = 0;
+    lives = MAX_LIVES; knock = 0; updateLives();
+    player.visible = true; bubble.visible = false;
+    updatePowers();
+    bestEl.textContent = best ? `Best ${best}` : '';
+  }
+
+  function spawnRow(z) {
+    const blocked = new Set();
+    // Pick 1 or 2 lanes to block, always leaving one open
+    const count = Math.random() < params.doubleChance ? 2 : 1;
+    while (blocked.size < count) blocked.add(Math.floor(Math.random() * 3));
+    blocked.forEach(l => {
+      const tall = Math.random() < params.pillarChance;
+      const mesh = tall ? makePillar() : makeRock();
+      mesh.position.x = LANES[l]; mesh.position.z = z;
+      scene.add(mesh);
+      objects.push({ mesh, lane: l, type: tall ? 'pillar' : 'rock' });
+    });
+    const free = [0, 1, 2].filter(l => !blocked.has(l));
+    // Occasionally a power-up floats in an open lane (one on the field at a time)
+    if (level >= 1 && Math.random() < 0.11 && !objects.some(o => o.type === 'power')) {
+      const kinds = ['shield', 'magnet', 'boost'].filter(k => !(k === 'shield' && shield));
+      const kind = kinds[Math.floor(Math.random() * kinds.length)];
+      const l = free[Math.floor(Math.random() * free.length)];
+      const mesh = makePower(kind);
+      mesh.position.x = LANES[l]; mesh.position.z = z;
+      scene.add(mesh);
+      objects.push({ mesh, lane: l, type: 'power', kind });
+      return;
+    }
+    if (Math.random() < params.lanternChance) {
+      const l = free[Math.floor(Math.random() * free.length)];
+      for (let k = 0; k < 3; k++) {
+        const mesh = makeLantern();
+        mesh.position.set(LANES[l], 1.1, z - k * 2.2);
+        scene.add(mesh);
+        objects.push({ mesh, lane: l, type: 'lantern' });
+      }
+    }
+  }
+
+  // ---------- Input ----------
+  function move(dir) { if (state === 'running') lane = Math.max(0, Math.min(2, lane + dir)); }
+  function jump() { if (state === 'running' && py <= 0.001) { vy = 11.5; sfx.jump(); } }
+
+  window.addEventListener('keydown', e => {
+    if (e.repeat) return;
+    // Typing a name: let every key through, Enter starts the run
+    if (e.target === nameInput) { if (e.key === 'Enter') { e.preventDefault(); begin(); } return; }
+    // A focused button handles Enter itself via click; don't double-start
+    if (e.target instanceof HTMLButtonElement && e.key === 'Enter') return;
+    if (['ArrowLeft', 'a', 'A'].includes(e.key)) move(-1);
+    else if (['ArrowRight', 'd', 'D'].includes(e.key)) move(1);
+    else if ([' ', 'ArrowUp', 'w', 'W'].includes(e.key)) { e.preventDefault(); jump(); }
+    else if (e.key === 'Enter' && state !== 'running') begin();
+  });
+
+  let sx = 0, sy = 0, st = 0;
+  renderer.domElement.addEventListener('touchstart', e => {
+    const p = e.changedTouches[0]; sx = p.clientX; sy = p.clientY; st = performance.now();
+  }, { passive: true });
+  renderer.domElement.addEventListener('touchend', e => {
+    const p = e.changedTouches[0];
+    const dx = p.clientX - sx, dy = p.clientY - sy;
+    if (Math.abs(dx) > 30 && Math.abs(dx) > Math.abs(dy)) move(dx > 0 ? 1 : -1);
+    else if (dy < -30 || (Math.abs(dx) < 15 && Math.abs(dy) < 15 && performance.now() - st < 300)) jump();
+  }, { passive: true });
+
+  function begin() {
+    audioOn(); // needs a user gesture; both start paths are clicks or Enter
+    runnerName = readName();
+    nameInput.blur();
+    reset();
+    $('start').hidden = true; $('over').hidden = true; $('hud').hidden = false;
+    state = 'running';
+  }
+  function showStart() {
+    state = 'idle';
+    reset();
+    $('over').hidden = true; $('hud').hidden = true; $('start').hidden = false;
+    renderBoard($('startBoard'));
+    nameInput.focus({ preventScroll: true });
+  }
+  $('play').addEventListener('click', begin);
+  $('again').addEventListener('click', begin);
+  $('menu').addEventListener('click', showStart);
+
+  function gameOver() {
+    state = 'over'; shake = 0.5; sfx.over();
+    const s = currentScore();
+    const isBest = s > best;
+    if (isBest) { best = s; try { localStorage.setItem('ridge-best', String(best)); } catch (e) {} }
+    const entry = { name: runnerName, score: s, level, lanterns, at: Date.now() };
+    const rank = recordRun(entry);
+    const run = `Reached level ${level} with ${lanterns} lanterns.`;
+    $('final').textContent = s;
+    $('overNote').textContent =
+      rank === 0 ? `Top of the board, ${runnerName}. ${run}` :
+      rank > 0   ? `#${rank + 1} on the board. ${run}` :
+                   `${run} Score ${board[board.length - 1].score + 1} or more to make the board.`;
+    renderBoard($('overBoard'), entry);
+    setTimeout(() => {
+      $('over').hidden = false; $('again').focus({ preventScroll: true });
+      const me = $('overBoard').querySelector('.me');
+      if (me) me.scrollIntoView({ block: 'nearest' });
+    }, 650);
+  }
+
+  function activate(kind) {
+    if (kind === 'shield') shield = true;
+    else if (kind === 'magnet') magnetT = POWER.magnet.dur;
+    else boostT = POWER.boost.dur;
+  }
+  const pS = $('pShield'), pM = $('pMagnet'), pB = $('pBoost');
+  function updatePowers() {
+    pS.hidden = !shield;
+    pM.hidden = !(magnetT > 0); pM.style.setProperty('--w', (magnetT / POWER.magnet.dur * 100) + '%');
+    pB.hidden = !(boostT > 0);  pB.style.setProperty('--w', (boostT / POWER.boost.dur * 100) + '%');
+  }
+
+  // ---------- Loop ----------
+  function resize() {
+    const w = window.innerWidth, h = window.innerHeight;
+    renderer.setSize(w, h, false);
+    camera.aspect = w / h;
+    baseFov = w < h ? 75 : 62;
+    camera.fov = baseFov;
+    camera.updateProjectionMatrix();
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  const clock = new THREE.Clock();
+  function tick() {
+    const dt = Math.min(clock.getDelta(), 0.05);
+    t += dt;
+    const running = state === 'running';
+    const boosting = running && boostT > 0;
+    const v = running ? speed * (boosting ? 1.5 : 1) : (state === 'idle' ? 6 : 0);
+
+    // World scroll
+    groundTex.offset.y += (v * dt) / TILE;
+    peaks.forEach(p => {
+      p.position.z += v * dt * 0.5;
+      if (p.position.z > 12) p.position.z -= 120;
+    });
+
+    if (running) {
+      speed = Math.min(params.maxSpeed, speed + dt * params.accel);
+      distance += v * dt * 0.5;
+
+      // Level up every 1000 points
+      const newLevel = 1 + Math.floor(currentScore() / LEVEL_POINTS);
+      if (newLevel > level) {
+        level = newLevel; params = levelParams(level);
+        speed += 3; // an immediate kick so the change is felt
+        sfx.level();
+        setPalette(level, false);
+        $('levelEl').textContent = `Level ${level}`;
+        $('bannerTitle').textContent = `Level ${level}`;
+        $('bannerSub').textContent = LEVELS[Math.min(level - 1, LEVELS.length - 1)].name + (level > LEVELS.length ? ` +${level - LEVELS.length}` : '');
+        $('banner').classList.add('show');
+        bannerTimer = 2;
+      }
+      if (bannerTimer > 0) {
+        bannerTimer -= dt;
+        if (bannerTimer <= 0) $('banner').classList.remove('show');
+      }
+
+      // Power-up timers
+      if (magnetT > 0) magnetT = Math.max(0, magnetT - dt);
+      if (boostT > 0) { boostT = Math.max(0, boostT - dt); if (boostT === 0) invulnT = 1; } // grace period after boost
+      if (invulnT > 0) invulnT = Math.max(0, invulnT - dt);
+
+      // Spawning, measured in world units travelled
+      nextSpawn -= v * dt;
+      if (nextSpawn <= 0) {
+        spawnRow(-90);
+        // Rows get closer each level, but always leave ~0.5s to react
+        const base = (26 + Math.random() * 8) * params.gapScale;
+        nextSpawn = Math.max(v * 0.5, base);
+      }
+
+      // Player physics
+      px += (LANES[lane] - px) * Math.min(1, dt * 14);
+      vy -= 32 * dt; py = Math.max(0, py + vy * dt);
+      if (py === 0) vy = 0;
+
+      // Objects
+      for (let i = objects.length - 1; i >= 0; i--) {
+        const o = objects[i];
+        const pos = o.mesh.position;
+        pos.z += v * dt;
+        if (o.type === 'lantern') {
+          o.mesh.rotation.y += dt * 3;
+          if (magnetT > 0 && pos.z > -32 && pos.z < 1) {
+            const k = Math.min(1, dt * 9);
+            pos.x += (px - pos.x) * k;
+            pos.y += (py + 1.1 - pos.y) * k;
+          }
+        } else if (o.type === 'power') {
+          o.mesh.rotation.y += dt * 2.5;
+          pos.y = 1.25 + Math.sin(t * 4) * 0.12;
+        }
+        const dz = Math.abs(pos.z);
+        const dx = Math.abs(pos.x - px);
+        if (dz < 0.9 && dx < 1.0) {
+          if (o.type === 'lantern') {
+            lanterns++; sfx.lantern(); scene.remove(o.mesh); objects.splice(i, 1); continue;
+          }
+          if (o.type === 'power') {
+            activate(o.kind); sfx.power(); scene.remove(o.mesh); objects.splice(i, 1); continue;
+          }
+          if (o.type === 'pillar' || py < 1.0) {
+            if (boostT > 0) { smash(o, i); shake = 0.15; sfx.smash(); continue; }
+            if (invulnT > 0) continue;
+            if (shield) { shield = false; invulnT = 1; shake = 0.25; smash(o, i); sfx.shield(); continue; }
+            lives--; updateLives();
+            if (lives > 0) { invulnT = 1.2; shake = 0.35; smash(o, i); sfx.hit(); continue; }
+            // Fatal: leave the obstacle, throw the runner back so they don't overlap it
+            burst(px, 0, 0xf2d6e4, 8);
+            gameOver(); break;
+          }
+        }
+        if (pos.z > 12) { scene.remove(o.mesh); objects.splice(i, 1); }
+      }
+
+      scoreEl.textContent = currentScore();
+      lEl.textContent = lanterns;
+      updatePowers();
+    }
+
+    // Power-up visuals: bubble for shield/boost, blink while invulnerable, wider FOV while boosting
+    bubble.visible = state === 'running' && (shield || boostT > 0);
+    bubble.material.color.setHex(boostT > 0 ? POWER.boost.color : POWER.shield.color);
+    player.visible = state === 'running' && invulnT > 0 ? Math.floor(t * 16) % 2 === 0 : true;
+    const fovTarget = baseFov + (boosting ? 10 : 0);
+    if (Math.abs(camera.fov - fovTarget) > 0.05) {
+      camera.fov += (fovTarget - camera.fov) * Math.min(1, dt * 5);
+      camera.updateProjectionMatrix();
+    }
+
+    if (palette.k < 1) { palette.k = Math.min(1, palette.k + dt / 2.5); applyPalette(); }
+
+    // Player visuals: two-joint run cycle, tuck in the air, squash on landing, tumble on crash
+    const airborne = py > 0.001;
+    if (state !== 'over') runPhase += v * dt * 0.62;
+    const sn = Math.sin(runPhase), cs = Math.cos(runPhase);
+    if (airborne) {
+      legs[0].hip.rotation.x = 1.1;  legs[0].knee.rotation.x = -1.5;
+      legs[1].hip.rotation.x = -0.35; legs[1].knee.rotation.x = -1.0;
+      arms[0].sh.rotation.x = -2.5; arms[1].sh.rotation.x = -2.1;
+      arms[0].el.rotation.x = 0.4;  arms[1].el.rotation.x = 0.6;
+    } else if (state !== 'over') {
+      [0, 1].forEach(k => {
+        const sign = k ? -1 : 1;
+        legs[k].hip.rotation.x = sn * sign * 0.85;
+        legs[k].knee.rotation.x = -0.2 - Math.max(0, -cs * sign) * 1.4;
+        arms[k].sh.rotation.x = -sn * sign * 0.9;
+        arms[k].el.rotation.x = 1.0 + Math.max(0, sn * sign) * 0.4;
+      });
+    }
+    // Footstep dust
+    if (running && !airborne) {
+      const step = Math.floor(runPhase / Math.PI);
+      if (step !== lastStep) {
+        lastStep = step;
+        const footX = px + (step % 2 ? 0.16 : -0.16);
+        puff(footX, 0.08, 0.1, 0xf2d6e4, { life: 0.45 });
+      }
+    }
+    // Landing squash + puff ring
+    if (wasAirborne && !airborne && running) {
+      squash = 1;
+      for (let i = 0; i < 6; i++) {
+        const a = (i / 6) * Math.PI * 2;
+        puff(px + Math.cos(a) * 0.3, 0.08, Math.sin(a) * 0.3, 0xf2d6e4, { vx: Math.cos(a) * 2, vy: 0.4, life: 0.5 });
+      }
+    }
+    wasAirborne = airborne;
+    squash = Math.max(0, squash - dt * 5);
+    body.scale.set(1 + squash * 0.1, 1 - squash * 0.16, 1 + squash * 0.1);
+    // Boost streaks
+    if (running && boostT > 0) {
+      puff(px + (Math.random() - 0.5) * 0.8, 0.6 + Math.random() * 1.2, 0.5, 0xff8fd8, { life: 0.3, vx: 0.01, vy: 0.01, grow: 0.2, size: 1.3 });
+    }
+    updateScarf(v, airborne);
+    // Beacon blinks
+    beacon.scale.setScalar(Math.sin(t * 6) > 0.6 ? 1.6 : 0.8);
+    // Particle update
+    puffs.forEach(p => {
+      if (!p.m.visible) return;
+      p.life -= dt;
+      if (p.life <= 0) { p.m.visible = false; return; }
+      const k = 1 - p.life / p.max;
+      p.m.position.z += v * dt;
+      p.m.position.x += p.vx * dt;
+      p.m.position.y += p.vy * dt;
+      p.m.scale.setScalar((1 + k * p.grow) * (p.max < 0.35 ? 0.6 : 1));
+      p.m.material.opacity = 0.55 * (1 - k);
+    });
+
+    const bob = !airborne && state !== 'over' ? Math.abs(sn) * 0.07 : 0;
+    knock += ((state === 'over' ? 2.1 : 0) - knock) * Math.min(1, dt * 7);
+    player.position.set(px, py + bob, knock);
+    torso.rotation.x = state === 'running' ? -0.2 : 0; // lean into the run
+    head.rotation.x = state === 'running' ? 0.12 : 0;
+    player.rotation.z = (px - LANES[lane]) * 0.3;
+    player.rotation.x += ((state === 'over' ? -1.35 : 0) - player.rotation.x) * Math.min(1, dt * 8);
+
+    // Camera follows lane gently, with a shake on crash
+    camera.position.x += (px * 0.45 - camera.position.x) * Math.min(1, dt * 4);
+    if (shake > 0) {
+      shake -= dt;
+      camera.position.x += (Math.random() - 0.5) * shake * 0.6;
+      camera.position.y = 4.2 + (Math.random() - 0.5) * shake * 0.6;
+    } else camera.position.y = 4.2;
+    camera.lookAt(camera.position.x * 0.5, 1, -6);
+
+    renderer.render(scene, camera);
+    requestAnimationFrame(tick);
+  }
+  reset();
+  renderBoard($('startBoard'));
+  tick();
+})();
+</script>
+</body>
+</html>

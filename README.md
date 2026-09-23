@@ -4,7 +4,7 @@ A 3D endless runner set on a mountain ridge at dusk. Dodge boulders, slip past s
 
 Built with [three.js](https://threejs.org/) r128 and the Web Audio API.
 
-**▶ Play it now:** https://karthik-zoro-96.github.io/ridge_runner/Ridge%20Runner.html
+**▶ Play it now:** https://karthik-zoro-96.github.io/ridge_runner/
 
 ## Table of contents
 
@@ -36,7 +36,7 @@ Built with [three.js](https://threejs.org/) r128 and the Web Audio API.
 
 The game is deployed to GitHub Pages and works on desktop and mobile browsers:
 
-**https://karthik-zoro-96.github.io/ridge_runner/Ridge%20Runner.html**
+**https://karthik-zoro-96.github.io/ridge_runner/**
 
 Every push to `main` redeploys automatically through the workflow in `.github/workflows/static.yml`, which uploads the whole repository as a static site. There is no build step, so the deploy takes under a minute.
 
@@ -47,9 +47,9 @@ Clone the repo and open the HTML file in a browser. That is the whole setup.
 ```bash
 git clone https://github.com/karthik-zoro-96/ridge_runner.git
 cd ridge_runner
-open "Ridge Runner.html"        # macOS
-# xdg-open "Ridge Runner.html"  # Linux
-# start "Ridge Runner.html"     # Windows
+open index.html        # macOS
+# xdg-open index.html  # Linux
+# start index.html     # Windows
 ```
 
 The page loads the bundled `three.min.js` sitting next to it, so it works fully offline. If that file is missing, the game falls back to loading three.js r128 from cdnjs.
@@ -58,7 +58,7 @@ If you prefer to serve it over HTTP, any static server works:
 
 ```bash
 python3 -m http.server 8000
-# then visit http://localhost:8000/Ridge%20Runner.html
+# then visit http://localhost:8000/
 ```
 
 ## How to play
@@ -141,12 +141,12 @@ Use **Change runner** on the game-over screen to go back and enter a different n
 ```
 ridge_runner/
 ├── .github/workflows/static.yml   # GitHub Pages deployment on every push to main
-├── Ridge Runner.html              # The entire game: markup, CSS, and JavaScript
+├── index.html                     # The entire game: markup, CSS, and JavaScript
 ├── three.min.js                   # three.js r128, bundled for offline use
 └── README.md
 ```
 
-Inside `Ridge Runner.html` the script is organised into commented sections in this order: renderer and scene, ground, scenery peaks, player model, particles, obstacle factories, power-ups, levels and palettes, game state, lives, sound, scoreboard, spawning, input, game flow (begin / game over), and the main loop.
+Inside `index.html` the script is organised into commented sections in this order: renderer and scene, ground, scenery peaks, player model, particles, obstacle factories, power-ups, levels and palettes, game state, lives, sound, scoreboard, spawning, input, game flow (begin / game over), and the main loop.
 
 ## How it works
 

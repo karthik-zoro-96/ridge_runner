@@ -4,8 +4,11 @@ A 3D endless runner set on a mountain ridge at dusk. Dodge boulders, slip past s
 
 Built with [three.js](https://threejs.org/) r128 and the Web Audio API.
 
+**▶ Play it now:** https://karthik-zoro-96.github.io/ridge_runner/Ridge%20Runner.html
+
 ## Table of contents
 
+- [Play online](#play-online)
 - [Quick start](#quick-start)
 - [How to play](#how-to-play)
   - [Controls](#controls)
@@ -28,6 +31,14 @@ Built with [three.js](https://threejs.org/) r128 and the Web Audio API.
 - [Browser support](#browser-support)
 - [Troubleshooting](#troubleshooting)
 - [Credits](#credits)
+
+## Play online
+
+The game is deployed to GitHub Pages and works on desktop and mobile browsers:
+
+**https://karthik-zoro-96.github.io/ridge_runner/Ridge%20Runner.html**
+
+Every push to `main` redeploys automatically through the workflow in `.github/workflows/static.yml`, which uploads the whole repository as a static site. There is no build step, so the deploy takes under a minute.
 
 ## Quick start
 
@@ -129,8 +140,9 @@ Use **Change runner** on the game-over screen to go back and enter a different n
 
 ```
 ridge_runner/
-├── Ridge Runner.html   # The entire game: markup, CSS, and JavaScript
-├── three.min.js        # three.js r128, bundled for offline use
+├── .github/workflows/static.yml   # GitHub Pages deployment on every push to main
+├── Ridge Runner.html              # The entire game: markup, CSS, and JavaScript
+├── three.min.js                   # three.js r128, bundled for offline use
 └── README.md
 ```
 
